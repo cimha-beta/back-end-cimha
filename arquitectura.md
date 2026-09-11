@@ -46,7 +46,7 @@ Este es el núcleo del sistema, encargado de orquestar la obtención de datos de
   3. Extrae y parsea el último reporte de la represa Urrá (PDF vía Google Drive).
   4. Envía los datos crudos a tres prompts separados en la API de Groq (Clima, Estaciones, Urrá) y consolida las respuestas en un único reporte JSON.
 - **Contrato de API:** Documentado en `CONTRATO-API-HOY.md` (ver sección 5).
-- **Estado:** Probado end-to-end con datos reales.
+- **Estado:** Probado end-to-end con datos reales. **Frontend conectado y funcionando en producción** (ver sección 5).
 
 #### C. Servicio de Consulta "Mañana" (Pronóstico 12h) ✅
 - **Archivos Clave:** `services/manana/openMeteo2.js`, `utils/manana/generarPrediccion.js`, `utils/manana/armarReporteFinal.js`
@@ -243,6 +243,7 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 **Lógica y Reglas:**
 - Formatea la fecha con nombres de mes en español (`"21 de agosto de 2026"`).
 - Formatea la hora en formato 12 horas con sufijo AM/PM.
+- **Fix de zona horaria (sep 2026):** el servidor de Railway corre en UTC, no en hora de Colombia. La versión original usaba `Date.getHours()`/`getDate()` directamente, lo que mostraba la hora del servidor (UTC) en vez de la de Bogotá — un desfase de 5 horas, y ocasionalmente el día equivocado cerca de la medianoche. Se corrigió extrayendo cada componente ya convertido a `America/Bogota` vía `Intl.DateTimeFormat(...).formatToParts()`.
 
 **Archivo: `regresionLineal.js`**
 **Responsabilidad:** Provee el cálculo genérico de regresión lineal simple (mínimos cuadrados), usado tanto por la predicción de nivel de estaciones (`utils/manana/generarPrediccion.js`) como por el análisis de tendencia de lluvia semanal (`utils/semana/analizarTendenciaClimatica.js`).
@@ -361,20 +362,24 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 
 ## 5. Contratos de API para el Frontend
 
-- **`CONTRATO-API-HOY.md`** (en la raíz del proyecto): documenta la forma exacta del JSON de respuesta de la rama "hoy", pensado para que conectar el frontend sea solo cuestión de leer los campos documentados, sin tener que revisar el código del backend. El frontend (`consulta.html`, `resultado-del-dia.html`) **todavía no consume esta respuesta** — a propósito, se dejó el backend listo pero sin conectar hasta que el frontend esté preparado.
+- **`CONTRATO-API-HOY.md`** (en la raíz del proyecto): documenta la forma exacta del JSON de respuesta de la rama "hoy", pensado para que conectar el frontend sea solo cuestión de leer los campos documentados, sin tener que revisar el código del backend.
+- **Estado de la conexión (actualizado sep 2026):** el frontend **ya está conectado y consumiendo esta respuesta en producción**. El flujo real es: `consulta.js` guarda el payload en `sessionStorage` (`consultaPendiente`) → `carga-pronostico.js` hace el `POST` a `/webhook/consulta-coordenadas` y guarda la respuesta en `sessionStorage` (`datosPronostico`) → `resultado-del-dia.js` lee ese resultado cacheado y lo renderiza. Ver el `README.md` del repo `front-end-cimha` para el detalle completo de este flujo.
 - **Pendiente:** documentar contratos equivalentes para "mañana" y "semana" (la forma es similar, cambiando `clima` a un arreglo en el caso de "semana").
 
 ---
 
 ## 6. Pendientes
 
-- [ ] Conectar el frontend (`consulta.html`, `resultado-del-dia.html`) para que consuma y muestre el reporte real.
+- [x] ~~Conectar el frontend (`consulta.html`, `resultado-del-dia.html`) para que consuma y muestre el reporte real.~~ **Hecho (sep 2026)** — ver sección 5.
+- [x] ~~Desplegar el backend a un servidor con URL pública~~ **Hecho** — corriendo en Railway (`back-end-cimha-production.up.railway.app`), frontend en Cloudflare Workers (`front-end-cimha.cimha-app.workers.dev`).
+- [x] ~~Corregir la zona horaria de fecha/hora en el reporte~~ **Hecho (sep 2026)** — ver nota en `fechaHora.js`, sección 4.6.
 - [ ] Documentar el contrato de API de "mañana" y "semana" (ver sección 5).
-- [ ] Desplegar el backend a un servidor con URL pública (necesario para que el GitHub Action de `test_urra.py` funcione automáticamente, y para que el sistema sea usable fuera de la PC de desarrollo).
 - [ ] Investigar la causa raíz de los errores 404 intermitentes del proxy de IDEAM (no siempre falla la misma estación — probablemente un límite de tasa o lentitud del proxy de Google Apps Script; el sistema ya tolera esto con caché de respaldo, pero no se ha resuelto la causa).
 - [ ] Quitar el cronómetro temporal de depuración en `routes/consulta.js` (buscar comentarios `// TEMPORAL`) cuando ya no se necesite medir tiempos de respuesta.
 - [ ] Decidir si se elimina o se conserva `routes/pruebaUrra.js` (ruta temporal de diagnóstico; su lógica ya está integrada en el flujo real de "hoy", por lo que no es estrictamente necesaria).
 - [ ] Probar la rama "semana" end-to-end con datos reales (construida, pero sin confirmar aún, a diferencia de "hoy" y "mañana").
+- [ ] En el frontend, `resultado-del-dia.js` conserva una función `cargarDatosBackend()` sin usar (código muerto de una versión anterior que hacía el fetch directamente en esa pantalla). Evaluar si eliminarla para evitar confusión, ya que el fetch real ocurre en `carga-pronostico.js`.
+- [ ] Revisar la variable `ALLOWED_ORIGINS` en Railway cada vez que cambie el dominio del frontend: debe coincidir **exactamente** con el `Origin` que manda el navegador (sin `/` al final, sin espacios extra entre orígenes separados por coma). Un error aquí causó una falla de CORS en septiembre 2026.
 
 ---
 
