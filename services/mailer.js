@@ -1,29 +1,51 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns").promises;
 
-// Transportador de Gmail. Reemplaza los dos nodos "Gmail" de n8n.
-// Usa la contraseña de aplicación (App Password) que generaste.
+// Transportador de Gmail para el envío de correos del sistema de reportes.
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+const GMAIL_HOST = "smtp.gmail.com";
+const GMAIL_PORT = 465;
 
-// Correo interno para CIMHA (equivale al nodo "Send a message (CIMHA)")
+// Resuelve la IPv4 de Gmail y la usa directo, evitando que nodemailer elija al azar entre IPv4/IPv6 (Railway no soporta salida IPv6).
+async function crearTransporter() {
+  let ip;
+  try {
+    const direcciones = await dns.resolve4(GMAIL_HOST);
+    ip = direcciones[0];
+  } catch (_err) {
+    const resultado = await dns.lookup(GMAIL_HOST, { family: 4 });
+    ip = resultado.address;
+  }
+
+  return nodemailer.createTransport({
+    host: ip,
+    port: GMAIL_PORT,
+    secure: true,
+    tls: {
+      servername: GMAIL_HOST, // conserva el SNI y la validación del certificado en el hostname real
+    },
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+}
+
+// Correo interno para el equipo de CIMHA
 async function enviarCorreoInterno({ asunto, cuerpoHtml, correoRemitente }) {
+  const transporter = await crearTransporter();
   return transporter.sendMail({
     from: `"CIMHA" <${process.env.GMAIL_USER}>`,
     to: process.env.CIMHA_INTERNAL_EMAIL,
-    replyTo: correoRemitente, // así el equipo de CIMHA puede responder directo al ciudadano
+    replyTo: correoRemitente, // permite responder directo al ciudadano
     subject: asunto,
     html: cuerpoHtml,
   });
 }
 
-// Correo de confirmación al remitente (equivale a "Send a message (Remitente)")
+// Correo de confirmación para quien envió el reporte
 async function enviarCorreoConfirmacion({ destinatario, asunto, cuerpoHtml }) {
+  const transporter = await crearTransporter();
   return transporter.sendMail({
     from: `"CIMHA" <${process.env.GMAIL_USER}>`,
     to: destinatario,
