@@ -5,6 +5,7 @@ const { construirCorreos } = require("../utils/plantillasCorreo");
 const {
   enviarCorreoInterno,
   enviarCorreoConfirmacion,
+  diagnosticarCorreo,
 } = require("../services/mailer");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -70,12 +71,25 @@ router.post("/correo-reportes", async (req, res) => {
 
     return res.status(200).json({ ok: true, mensaje: "Reporte enviado correctamente." });
   } catch (error) {
-    console.error("Error al procesar el reporte:", error);
+    // Detalle completo en logs de Railway para poder diagnosticar el fallo real.
+    console.error("Error al procesar el reporte:", {
+      mensaje: error.message,
+      code: error.code,
+      command: error.command,
+      responseCode: error.responseCode,
+      response: error.response,
+    });
     return res.status(500).json({
       ok: false,
       mensaje: "No se pudo procesar el reporte. Intenta de nuevo más tarde.",
     });
   }
+});
+
+// Diagnóstico de correo: no expone secretos, solo si están presentes y si el SMTP conecta.
+router.get("/diagnostico-correo", async (_req, res) => {
+  const resultado = await diagnosticarCorreo();
+  return res.status(resultado.ok ? 200 : 500).json(resultado);
 });
 
 module.exports = router;
