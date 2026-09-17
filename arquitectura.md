@@ -46,6 +46,7 @@ Este es el núcleo del sistema, encargado de orquestar la obtención de datos de
   3. Extrae y parsea el último reporte de la represa Urrá (PDF vía Google Drive).
   4. Envía los datos crudos a tres prompts separados en la API de Groq (Clima, Estaciones, Urrá) y consolida las respuestas en un único reporte JSON.
 - **Contrato de API:** Documentado en `CONTRATO-API-HOY.md` (ver sección 5).
+- **Caché y concurrencia (sep 2026):** La rama "hoy" tiene caché de reporte completo por municipio (5 min) y un candado de peticiones en curso (`cacheHoy.js`, ver sección 2). El trabajo real se extrajo a la función `procesarConsultaHoy()` dentro de `routes/consulta.js`, que solo se ejecuta cuando no hay caché válida ni una consulta idéntica ya corriendo.
 - **Estado:** Probado end-to-end con datos reales. **Frontend conectado y funcionando en producción** (ver sección 5).
 
 #### C. Servicio de Consulta "Mañana" (Pronóstico 12h) ✅
@@ -73,6 +74,7 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 - **Caché de Estaciones IDEAM (`cacheEstaciones.js`):** Invalidación en lote cada 1 hora. Implementa un mecanismo de "fallback" utilizando el último dato conocido en caso de fallos (ej. error 404 intermitente del proxy de Google Apps Script).
 - **Caché de Urrá (`cacheUrra.js`):** Persiste el análisis del PDF por 1 hora o hasta que ingrese un nuevo `file_id`.
 - **Caché de Pronósticos (`cacheManana.js` / `cacheSemana.js`):** Caché de resultados consolidados por municipio (1 hora para "mañana", 3 horas para "semana").
+- **Caché y candado de "Hoy" (`cacheHoy.js`, sep 2026):** Caché del reporte consolidado por municipio con TTL de 5 minutos (más corto que las otras ramas porque "hoy" es tiempo real). Además implementa *request coalescing*: un `Map` de promesas en curso (`enCurso`) hace que varias consultas simultáneas al mismo municipio compartan una sola ejecución en vez de duplicar el trabajo. Sin esto, N peticiones concurrentes al mismo municipio disparaban N rondas completas de Baserow + IDEAM + Open-Meteo + Groq, porque ninguna alcanzaba a guardar caché antes de que las demás empezaran. El candado se libera en un `finally`, así que un fallo no deja el municipio bloqueado ni guarda una respuesta errónea en caché.
 - **Limitador de Tasa AI (`groqLimiter.js`):** Algoritmo de encolado que calcula estimaciones de tokens antes de llamar a la API de Groq. Previene el bloqueo por límite de uso (7000 tokens/minuto) pausando peticiones automáticamente. Modelo: `openai/gpt-oss-120b`.
 - **Lógica Compartida (`utils/compartido/`):** Se extrajo la matemática pura (`regresionLineal.js`) y la renderización de texto de estaciones (`bloqueEstacionesTexto.js`) para mantener el código DRY (Don't Repeat Yourself).
 
@@ -166,6 +168,14 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 - `obtenerUrraDeCache` devuelve `{ datosUrra, interpretacionUrra }` o `null` si no hay caché, el `file_id` cambió o venció el plazo.
 - `guardarUrraEnCache` sobrescribe la entrada con un nuevo `timestamp`.
 
+**Archivo: `cacheHoy.js`**
+**Responsabilidad:** Caché del reporte consolidado de "hoy" por municipio (5 min) y candado de peticiones en curso, para que picos de tráfico simultáneo no multipliquen las llamadas a Baserow, IDEAM, Open-Meteo y Groq.
+**Lógica y Reglas:**
+- Clave de caché: `"<departamento>|<municipio>"` en minúsculas.
+- TTL de 5 minutos, más corto que el de "mañana" (1h) y "semana" (3h), porque el reporte de "hoy" refleja condiciones de tiempo real.
+- `obtenerOEncolarHoy(datos, tarea)` es el punto de entrada único que usa `routes/consulta.js`: devuelve la caché si está vigente; si no, y ya hay una consulta idéntica en curso, devuelve **esa misma promesa** en lugar de lanzar una nueva; solo si no ocurre ninguna de las dos ejecuta `tarea()` y guarda su resultado.
+- El `Map` `enCurso` se limpia en un bloque `finally`, de modo que un error libera el candado y no deja el municipio bloqueado; tampoco se guarda nada en caché cuando la tarea falla.
+
 ### 4.3. Directorio: `services/manana/`
 
 **Archivo: `openMeteo2.js`**
@@ -207,6 +217,7 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 **Lógica y Reglas:**
 - Usa credenciales de aplicación de Gmail (`GMAIL_USER`, `GMAIL_APP_PASSWORD`) vía variables de entorno.
 - Expone funciones separadas para el correo interno (a CIMHA, con `replyTo` hacia el ciudadano) y el correo de confirmación (al ciudadano que reportó).
+- **Fix de conexión IPv6 (sep 2026):** Nodemailer resuelve el hostname SMTP internamente mezclando registros A (IPv4) y AAAA (IPv6), y elige uno **al azar** (ver `formatDNSValue` en `nodemailer/lib/shared/index.js`). Railway no tiene salida IPv6 habilitada, así que cuando le tocaba una dirección IPv6 la conexión fallaba con `connect ENETUNREACH <ipv6>:465` — de forma intermitente, aproximadamente la mitad de los envíos. La solución fue resolver la IPv4 de `smtp.gmail.com` explícitamente (`dns.resolve4`, con `dns.lookup({ family: 4 })` como respaldo) y pasarla ya resuelta como `host`; como Nodemailer detecta que es una IP literal, se salta su propia resolución y su elección aleatoria. Se conserva `tls.servername: "smtp.gmail.com"` para que el SNI y la validación del certificado sigan apuntando al hostname real y no a la IP.
 
 ### 4.6. Directorio: `utils/compartido/`
 
@@ -373,6 +384,9 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 - [x] ~~Conectar el frontend (`consulta.html`, `resultado-del-dia.html`) para que consuma y muestre el reporte real.~~ **Hecho (sep 2026)** — ver sección 5.
 - [x] ~~Desplegar el backend a un servidor con URL pública~~ **Hecho** — corriendo en Railway (`back-end-cimha-production.up.railway.app`), frontend en Cloudflare Workers (`front-end-cimha.cimha-app.workers.dev`).
 - [x] ~~Corregir la zona horaria de fecha/hora en el reporte~~ **Hecho (sep 2026)** — ver nota en `fechaHora.js`, sección 4.6.
+- [x] ~~Corregir los fallos intermitentes al enviar correos (`ENETUNREACH` por IPv6)~~ **Hecho (sep 2026)** — ver nota en `mailer.js`, sección 4.5.
+- [x] ~~Evitar que consultas concurrentes al mismo municipio dupliquen llamadas a APIs externas~~ **Hecho (sep 2026)** — caché de 5 min + candado en `cacheHoy.js`, sección 4.2.
+- [ ] **Concurrencia — riesgos aún abiertos.** La caché y el candado de `cacheHoy.js` protegen el caso de muchas consultas al **mismo** municipio. Si llegan muchas consultas a municipios **distintos** simultáneamente, siguen sin protección: (a) Baserow no tiene limitador propio y cada consulta hace 2-3 llamadas, (b) el proxy IDEAM en Google Apps Script tiene un tope de ejecuciones concurrentes en cuentas gratuitas, (c) `server.js` no tiene un limitador general tipo `express-rate-limit`, y (d) un pico grande podría agotar la memoria del contenedor de Railway y provocar un reinicio que afecte a todos los usuarios. Evaluar un limitador a nivel de Express y/o una cola global.
 - [ ] Documentar el contrato de API de "mañana" y "semana" (ver sección 5).
 - [ ] Investigar la causa raíz de los errores 404 intermitentes del proxy de IDEAM (no siempre falla la misma estación — probablemente un límite de tasa o lentitud del proxy de Google Apps Script; el sistema ya tolera esto con caché de respaldo, pero no se ha resuelto la causa).
 - [ ] Quitar el cronómetro temporal de depuración en `routes/consulta.js` (buscar comentarios `// TEMPORAL`) cuando ya no se necesite medir tiempos de respuesta.
