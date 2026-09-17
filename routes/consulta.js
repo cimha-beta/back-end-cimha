@@ -29,6 +29,7 @@ const {
   obtenerUltimoDatoConocido,
 } = require("../services/compartido/cacheEstaciones");
 const { obtenerUrraDeCache, guardarUrraEnCache } = require("../services/hoy/cacheUrra");
+const { obtenerOEncolarHoy } = require("../services/hoy/cacheHoy");
 const { generarPrediccionEstacion } = require("../utils/manana/generarPrediccion");
 const { consultarClimaManana } = require("../services/manana/openMeteo2");
 const { procesarClimaManana } = require("../utils/manana/procesarClima");
@@ -145,6 +146,83 @@ async function interpretarConGroq({ tipo, promptData }) {
   return respuesta;
 }
 
+// Hace todo el trabajo real de una consulta "hoy": Open-Meteo, estaciones,
+// Urrá y las 2-3 llamadas a Groq. Se llama solo cuando no hay caché ni una
+// consulta igual ya en curso (ver obtenerOEncolarHoy en cacheHoy.js).
+async function procesarConsultaHoy(datos, ubicacion) {
+  console.log("🌤️ Consultando Open-Meteo...");
+  const climaCrudo = await consultarClimaHoy({
+    latitud: ubicacion.Latitud,
+    longitud: ubicacion.Longitud,
+  });
+  const clima = procesarClimaHoy(climaCrudo);
+  console.log("✅ Clima procesado:", clima);
+
+  const estacionesResumen = await obtenerResumenEstaciones(datos);
+
+  // --- Urrá: primero vemos si ya tenemos datos + interpretación en caché ---
+  const { fileId } = await obtenerDatosUrraCrudos();
+  let cacheUrraExistente = obtenerUrraDeCache(fileId);
+
+  let datosUrra;
+  let interpretacionUrra;
+
+  if (cacheUrraExistente) {
+    datosUrra = cacheUrraExistente.datosUrra;
+    interpretacionUrra = cacheUrraExistente.interpretacionUrra;
+  } else {
+    datosUrra = await descargarYProcesarPdfUrra(fileId);
+  }
+
+  // --- Interpretaciones de clima y estaciones (siempre se calculan) ---
+  const promptClima = construirPromptClima({
+    departamento: datos.departamento,
+    municipio: datos.municipio,
+    clima,
+  });
+  const respuestaClima = await interpretarConGroq({ tipo: "el clima", promptData: promptClima });
+  const interpretacionClima = parsearRespuestaGroq(respuestaClima, "interpretacion_clima");
+  console.log("✅ Interpretación de clima:", interpretacionClima);
+
+  const promptEstaciones = construirPromptEstaciones({
+    departamento: datos.departamento,
+    municipio: datos.municipio,
+    estaciones: estacionesResumen,
+  });
+  const respuestaEstaciones = await interpretarConGroq({ tipo: "las estaciones", promptData: promptEstaciones });
+  const interpretacionEstaciones = parsearRespuestaGroq(respuestaEstaciones, "interpretacion_estaciones");
+  console.log("✅ Interpretación de estaciones:", interpretacionEstaciones);
+
+  // --- Interpretación de Urrá: solo si NO vino ya de la caché ---
+  if (!cacheUrraExistente) {
+    const promptUrra = construirPromptUrra({
+      departamento: datos.departamento,
+      municipio: datos.municipio,
+      urra: datosUrra,
+    });
+    const respuestaUrra = await interpretarConGroq({ tipo: "Urrá", promptData: promptUrra });
+    interpretacionUrra = parsearRespuestaGroq(respuestaUrra, "interpretacion_urra");
+    console.log("✅ Interpretación de Urrá:", interpretacionUrra);
+
+    guardarUrraEnCache(fileId, datosUrra, interpretacionUrra);
+  }
+
+  const reporteFinal = armarReporteFinal({
+    departamento: datos.departamento,
+    municipio: datos.municipio,
+    clima,
+    interpretacionClima,
+    estaciones: estacionesResumen,
+    interpretacionEstaciones,
+    urra: datosUrra,
+    interpretacionUrra,
+  });
+
+  console.log("🎉 Reporte final armado");
+
+  return { ok: true, reporte: reporteFinal };
+}
+
 // Equivalente a: Webhook -> Code -> Ubicación Geografica -> Router
 router.post("/consulta-coordenadas", async (req, res) => {
   console.log("📥 Llegó una consulta:", req.body);
@@ -168,77 +246,8 @@ router.post("/consulta-coordenadas", async (req, res) => {
     }
 
     if (datos.consulta === "hoy") {
-      console.log("🌤️ Consultando Open-Meteo...");
-      const climaCrudo = await consultarClimaHoy({
-        latitud: ubicacion.Latitud,
-        longitud: ubicacion.Longitud,
-      });
-      const clima = procesarClimaHoy(climaCrudo);
-      console.log("✅ Clima procesado:", clima);
-
-      const estacionesResumen = await obtenerResumenEstaciones(datos);
-
-      // --- Urrá: primero vemos si ya tenemos datos + interpretación en caché ---
-      const { fileId } = await obtenerDatosUrraCrudos();
-      let cacheUrraExistente = obtenerUrraDeCache(fileId);
-
-      let datosUrra;
-      let interpretacionUrra;
-
-      if (cacheUrraExistente) {
-        datosUrra = cacheUrraExistente.datosUrra;
-        interpretacionUrra = cacheUrraExistente.interpretacionUrra;
-      } else {
-        datosUrra = await descargarYProcesarPdfUrra(fileId);
-      }
-
-      // --- Interpretaciones de clima y estaciones (siempre se calculan) ---
-      const promptClima = construirPromptClima({
-        departamento: datos.departamento,
-        municipio: datos.municipio,
-        clima,
-      });
-      const respuestaClima = await interpretarConGroq({ tipo: "el clima", promptData: promptClima });
-      const interpretacionClima = parsearRespuestaGroq(respuestaClima, "interpretacion_clima");
-      console.log("✅ Interpretación de clima:", interpretacionClima);
-
-      const promptEstaciones = construirPromptEstaciones({
-        departamento: datos.departamento,
-        municipio: datos.municipio,
-        estaciones: estacionesResumen,
-      });
-      const respuestaEstaciones = await interpretarConGroq({ tipo: "las estaciones", promptData: promptEstaciones });
-      const interpretacionEstaciones = parsearRespuestaGroq(respuestaEstaciones, "interpretacion_estaciones");
-      console.log("✅ Interpretación de estaciones:", interpretacionEstaciones);
-
-      // --- Interpretación de Urrá: solo si NO vino ya de la caché ---
-      if (!cacheUrraExistente) {
-        const promptUrra = construirPromptUrra({
-          departamento: datos.departamento,
-          municipio: datos.municipio,
-          urra: datosUrra,
-        });
-        const respuestaUrra = await interpretarConGroq({ tipo: "Urrá", promptData: promptUrra });
-        interpretacionUrra = parsearRespuestaGroq(respuestaUrra, "interpretacion_urra");
-        console.log("✅ Interpretación de Urrá:", interpretacionUrra);
-
-        guardarUrraEnCache(fileId, datosUrra, interpretacionUrra);
-      }
-
-      const reporteFinal = armarReporteFinal({
-        departamento: datos.departamento,
-        municipio: datos.municipio,
-        clima,
-        interpretacionClima,
-        estaciones: estacionesResumen,
-        interpretacionEstaciones,
-        urra: datosUrra,
-        interpretacionUrra,
-      });
-
-      console.log("🎉 Reporte final armado");
-
-      return res.status(200).json({ ok: true, reporte: reporteFinal });
+      const respuestaHoy = await obtenerOEncolarHoy(datos, () => procesarConsultaHoy(datos, ubicacion));
+      return res.status(200).json(respuestaHoy);
     }
 
     if (datos.consulta === "mañana") {
