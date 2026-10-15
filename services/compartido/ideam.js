@@ -1,11 +1,14 @@
 // Consulta datos en vivo del IDEAM vía proxy (bloquea peticiones directas).
-
-const PROXY_URL =
-  "https://script.google.com/macros/s/AKfycbzIILJXQ4qXaBVWsVAQZj2aq8Grhm3v_rCFF5-6Udd3e5SmIiYo_ha2Z0hKRCzD4d-qaQ/exec";
+// La URL del proxy (Google Apps Script) va en la variable de entorno IDEAM_PROXY_URL.
 
 async function consultarIdeam(codigoEstacion) {
+  const proxyUrl = process.env.IDEAM_PROXY_URL;
+  if (!proxyUrl) {
+    throw new Error("Falta la variable de entorno IDEAM_PROXY_URL");
+  }
+
   const urlIdeam = `https://fews.ideam.gov.co/visorfews/data/series/jsonH/${codigoEstacion}.json`;
-  const url = `${PROXY_URL}?url=${encodeURIComponent(urlIdeam)}`;
+  const url = `${proxyUrl}?url=${encodeURIComponent(urlIdeam)}`;
 
   const response = await fetch(url);
 
