@@ -1,13 +1,14 @@
-// Equivalente al nodo "Code" del workflow grande de n8n.
-// Valida que departamento/municipio/consulta vengan bien, y normaliza el texto.
-
-const TIPOS_VALIDOS = ["hoy", "mañana", "semana"];
+const PALABRAS_MENORES = ["de", "del", "la", "las", "los", "el", "y"];
 
 function normalizarTexto(texto) {
   const textoLimpio = texto.trim().toLowerCase().replace(/\s+/g, " ");
   return textoLimpio
     .split(" ")
-    .map((palabra) => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .map((palabra, i) =>
+      i > 0 && PALABRAS_MENORES.includes(palabra)
+        ? palabra
+        : palabra.charAt(0).toUpperCase() + palabra.slice(1)
+    )
     .join(" ");
 }
 

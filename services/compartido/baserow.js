@@ -67,36 +67,21 @@ const CAMPO_ESTACION_DEPARTAMENTO = 9751232;
 const CAMPO_ESTACION_MUNICIPIO = 9751243;
 const CAMPO_ESTACION_ORDEN = 9751252;
 
-// Obtiene el Orden_Rio del municipio solicitado.
+// Obtiene el Orden_Rio del municipio desde la tabla "Ubicación Geográfica".
 async function buscarOrdenEstacion({ departamento, municipio }) {
-  const params = new URLSearchParams({
-    user_field_names: "true",
-    [`filter__field_${CAMPO_ESTACION_DEPARTAMENTO}__equal`]: departamento,
-    [`filter__field_${CAMPO_ESTACION_MUNICIPIO}__equal`]: municipio,
-  });
+  const ubicacion = await buscarUbicacionGeografica({ departamento, municipio });
+  const orden = ubicacion ? Number(ubicacion.Orden_Rio) : NaN;
 
-  const url = `${BASEROW_API_URL}/api/database/rows/table/${TABLA_ESTACIONES}/?${params}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Token ${process.env.BASEROW_TOKEN}` },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Baserow (orden estación) respondió con error ${response.status}`);
-  }
-
-  const data = await response.json();
-  const fila = data.results && data.results.length > 0 ? data.results[0] : null;
-
-  if (!fila || fila.Orden_Rio === undefined) {
+  if (!ubicacion || ubicacion.Orden_Rio === null || ubicacion.Orden_Rio === "" || Number.isNaN(orden)) {
     throw new Error(
-      "No se encontró el municipio en la tabla de estaciones, o no tiene Orden_Rio asignado."
+      `El municipio "${municipio}" no tiene Orden_Rio en la tabla Ubicación Geográfica.`
     );
   }
 
   return {
-    departamento: fila.Departamento,
-    municipio: fila.Municipio,
-    orden_consultado: fila.Orden_Rio,
+    departamento: ubicacion.Departamento || departamento,
+    municipio: ubicacion.Municipio || municipio,
+    orden_consultado: orden,
   };
 }
 
