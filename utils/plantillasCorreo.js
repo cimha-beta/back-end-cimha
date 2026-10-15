@@ -2,9 +2,9 @@
 // Arma el HTML de los dos correos: el interno (para CIMHA) y el de
 // confirmación (para quien envió el reporte).
 
-const LOGO_URL =
-  "https://raw.githubusercontent.com/hidrosinubot-lgtm/cimha/b401408be06d7d5a32fac9074f3f43b6b4372a56/assets/cimha-logo.png";
 
+const LOGO_URL =
+  "https://raw.githubusercontent.com/cimha-beta/front-end-cimha/main/assets/cimha-logo.png";
 function formatearFecha(fechaISO) {
   const fecha = fechaISO ? new Date(fechaISO) : new Date();
   return fecha.toLocaleString("es-CO", {
