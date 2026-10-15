@@ -1,3 +1,8 @@
+// Valida que departamento/municipio/consulta vengan bien, y normaliza el texto.
+
+const TIPOS_VALIDOS = ["hoy", "mañana", "semana"];
+
+// Palabras que van en minúscula dentro de un nombre (ej: "Ciénaga de Oro").
 const PALABRAS_MENORES = ["de", "del", "la", "las", "los", "el", "y"];
 
 function normalizarTexto(texto) {
