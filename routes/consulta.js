@@ -23,7 +23,7 @@ const {
   construirPromptEstaciones,
   construirPromptUrra,
 } = require("../utils/hoy/promptsIA");
-const { parsearRespuestaGroq } = require("../utils/compartido/parsearRespuestaGroq");
+const { parsearRespuestaGroq, parsearListaGroq } = require("../utils/compartido/parsearRespuestaGroq");
 const { armarReporteFinal } = require("../utils/hoy/armarReporteFinal");
 const { obtenerEstacion } = require("../services/compartido/cacheEstaciones");
 const { obtenerUrraDeCache, guardarUrraEnCache } = require("../services/hoy/cacheUrra");
@@ -197,7 +197,9 @@ async function procesarConsultaHoy(datos, ubicacion) {
   });
   const respuestaClima = await interpretarConGroq({ tipo: "el clima", promptData: promptClima });
   const interpretacionClima = parsearRespuestaGroq(respuestaClima, "interpretacion_clima");
+  const recomendacionesClima = parsearListaGroq(respuestaClima, "recomendaciones");
   console.log("✅ Interpretación de clima:", interpretacionClima);
+  console.log("✅ Recomendaciones de clima:", recomendacionesClima);
 
   const promptEstaciones = construirPromptEstaciones({
     departamento: datos.departamento,
@@ -227,6 +229,7 @@ async function procesarConsultaHoy(datos, ubicacion) {
     municipio: datos.municipio,
     clima,
     interpretacionClima,
+    recomendacionesClima,
     estaciones: estacionesResumen,
     interpretacionEstaciones,
     urra: datosUrra,
@@ -296,7 +299,9 @@ router.post("/consulta-coordenadas", async (req, res) => {
       });
       const respuestaIA = await interpretarConGroq({ tipo: "clima y río (mañana)", promptData: promptClimaYRio });
       const interpretacion = parsearRespuestaGroq(respuestaIA, "interpretacion");
+      const recomendaciones = parsearListaGroq(respuestaIA, "recomendaciones");
       console.log("✅ Interpretación combinada (mañana):", interpretacion);
+      console.log("✅ Recomendaciones (mañana):", recomendaciones);
 
       const reporteFinalManana = armarReporteFinalManana({
         departamento: datos.departamento,
@@ -304,6 +309,7 @@ router.post("/consulta-coordenadas", async (req, res) => {
         clima,
         estaciones: estacionesResumen,
         interpretacion,
+        recomendaciones,
       });
 
       console.log("🎉 Reporte de mañana armado");
@@ -367,7 +373,9 @@ router.post("/consulta-coordenadas", async (req, res) => {
       });
       const respuestaIA = await interpretarConGroq({ tipo: "clima y río (semana)", promptData: promptSemana });
       const interpretacion = parsearRespuestaGroq(respuestaIA, "interpretacion");
+      const recomendaciones = parsearListaGroq(respuestaIA, "recomendaciones");
       console.log("✅ Interpretación combinada (semana):", interpretacion);
+      console.log("✅ Recomendaciones (semana):", recomendaciones);
 
       const reporteFinalSemana = armarReporteFinalSemana({
         departamento: datos.departamento,
@@ -375,6 +383,7 @@ router.post("/consulta-coordenadas", async (req, res) => {
         diasSemana,
         estaciones: estacionesResumen,
         interpretacion,
+        recomendaciones,
       });
 
       console.log("🎉 Reporte de semana armado");

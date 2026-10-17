@@ -10,4 +10,19 @@ function parsearRespuestaGroq(contenidoTexto, campoEsperado) {
   }
 }
 
-module.exports = { parsearRespuestaGroq };
+// Extrae una lista de textos (por ejemplo, las recomendaciones) de la respuesta
+// JSON de Groq. Si falta el campo o no es una lista, devuelve [].
+function parsearListaGroq(contenidoTexto, campoEsperado) {
+  try {
+    const parsed = JSON.parse(contenidoTexto);
+    const lista = parsed[campoEsperado];
+    if (!Array.isArray(lista)) return [];
+    return lista
+      .filter((item) => typeof item === "string" && item.trim() !== "")
+      .map((item) => item.trim());
+  } catch (error) {
+    return [];
+  }
+}
+
+module.exports = { parsearRespuestaGroq, parsearListaGroq };

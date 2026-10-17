@@ -63,7 +63,7 @@ Tendencia actual de esa estación: ${estaciones.tendencia_estacion_cercana}
 
 Genera UNA sola interpretación combinada en 6 a 8 renglones continuos, con tono claro, simple e informativo, como si se lo explicaras a un vecino — no narrativo ni de relato.
 
-Primero da un panorama general de cómo se ve la semana en cuanto a clima: si predominan días secos o con lluvia, si esto cambia conforme avanza la semana (usando la tendencia de lluvia calculada), y cómo se sentirá el ambiente en general (calor, viento), todo en palabras simples, sin cifras.
+Primero da el panorama del clima de la semana en 3 oraciones, de forma explicativa (causa y efecto), con palabras simples y sin cifras: (1) cómo se percibirá la semana frente a lo habitual y por qué, combinando el cielo y la sensación térmica; (2) qué efecto tendrá el viento en esa sensación; (3) si predominan días secos o con lluvia y si esto cambia conforme avanza la semana (usando la tendencia de lluvia calculada), dicho en palabras claras como 'existe un riesgo real de lluvias repentinas hacia el final de la semana'. Habla de forma impersonal o en tercera persona. NO inventes datos que no estén arriba (por ejemplo, no hables de humedad ni de presión si no se proporcionan).
 
 Luego conecta ese panorama de la semana con el río: describe la tendencia reciente y la proyección de la estación más cercana (dato clave), y razona de forma prudente sobre si una semana con más o menos lluvia esperada podría reforzar o no esa tendencia. NO afirmes con certeza qué pasará con el río en varios días — usa un tono de posibilidad ('podría', 'es probable que', 'conviene estar atentos si...').
 
@@ -73,11 +73,14 @@ PROHIBIDO usar frases genéricas del tipo: 'la semana estará normal', 'el río 
 
 Usa vocabulario cotidiano, no técnico. Nada de tecnicismos ni datos numéricos en el texto.
 
-Si falta información suficiente para responder con algo de sustancia, escribe: 'Sin información suficiente'.
+Además de la interpretación, genera RECOMENDACIONES: exactamente 4 puntos. Cada punto es una frase corta (máximo unas 12 palabras) que empieza con un verbo en imperativo (por ejemplo 'Mantén', 'Viste', 'Lleva', 'Evita'). Los 4 puntos cubren aspectos distintos entre sí (por ejemplo: hidratación, vestimenta, lluvia o protección solar, actividades al aire libre) y se basan SOLO en el clima de la semana (cielo, sensación térmica, viento, lluvia), no en el río. Si no hay riesgo de lluvia, cambia ese punto por protección solar u otro consejo que sí aplique. Sin tecnicismos ni datos numéricos.
+
+Si falta información suficiente para responder con algo de sustancia, escribe 'Sin información suficiente' en la interpretación y deja la lista de recomendaciones vacía.
 
 --- FORMATO DE RESPUESTA ---
 {
-  "interpretacion": "texto"
+  "interpretacion": "texto",
+  "recomendaciones": ["punto 1", "punto 2", "punto 3", "punto 4"]
 }`;
 
   return { systemPrompt, userPrompt };

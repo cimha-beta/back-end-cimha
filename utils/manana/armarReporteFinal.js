@@ -6,7 +6,7 @@
 
 const { obtenerFechaHoraActual } = require("../compartido/fechaHora");
 
-function armarReporteFinal({ departamento, municipio, clima, estaciones, interpretacion }) {
+function armarReporteFinal({ departamento, municipio, clima, estaciones, interpretacion, recomendaciones }) {
   const { fecha, hora } = obtenerFechaHoraActual();
 
   const estacionesDescompuestas = {};
@@ -57,6 +57,9 @@ function armarReporteFinal({ departamento, municipio, clima, estaciones, interpr
 
     // 3º: interpretación (una sola, combinando clima + río)
     interpretacion,
+
+    // 4º: recomendaciones (4 puntos, basadas solo en el clima)
+    recomendaciones: recomendaciones || [],
   };
 }
 

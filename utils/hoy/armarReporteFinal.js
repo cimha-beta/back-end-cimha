@@ -9,6 +9,7 @@ function armarReporteFinal({
   municipio,
   clima,
   interpretacionClima,
+  recomendacionesClima,
   estaciones,
   interpretacionEstaciones,
   urra,
@@ -43,6 +44,7 @@ function armarReporteFinal({
       velocidad_viento: clima.velocidad_viento,
       probabilidad_lluvia: clima.probabilidad_lluvia,
       interpretacion: interpretacionClima,
+      recomendaciones: recomendacionesClima || [],
     },
     estaciones: {
       cantidad: (estaciones.estaciones_detalle || []).length,

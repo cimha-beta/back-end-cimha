@@ -14,7 +14,7 @@ function encabezadoSistema(rolEspecifico, departamento, municipio) {
 
 function construirPromptClima({ departamento, municipio, clima }) {
   const systemPrompt = encabezadoSistema(
-    `Informas las condiciones climáticas actuales en lenguaje natural, claro y fácil de entender para cualquier persona, con un tono informativo y cercano — como un parte del tiempo comunitario, no como un relato o una descripción literaria. Evita frases genéricas, vacías o que podrían aplicar a cualquier día (como 'el clima está agradable', 'buen día para disfrutar', 'condiciones normales', 'un día como cualquier otro'). Evita repeticiones, exageraciones y lenguaje alarmista. El texto NO debe contener ningún carácter numérico (ni temperaturas, ni porcentajes, ni cifras de ningún tipo) — todo debe expresarse en palabras. Responde únicamente en JSON válido, sin texto fuera del JSON.`,
+    `Informas las condiciones climáticas actuales en lenguaje natural, claro y fácil de entender para cualquier persona, con un tono informativo y cercano — como un parte del tiempo comunitario, no como un relato o una descripción literaria. Explicas cómo se percibe el día y por qué, conectando causa y efecto entre los datos. Evita frases genéricas, vacías o que podrían aplicar a cualquier día (como 'el clima está agradable', 'buen día para disfrutar', 'condiciones normales', 'un día como cualquier otro'). Evita repeticiones, exageraciones y lenguaje alarmista. El texto NO debe contener ningún carácter numérico (ni temperaturas, ni porcentajes, ni cifras de ningún tipo) — todo debe expresarse en palabras. Responde únicamente en JSON válido, sin texto fuera del JSON.`,
     departamento,
     municipio
   );
@@ -30,24 +30,33 @@ Viento: ${clima.velocidad_viento} km/h
 
 --- TAREA ---
 
-Genera una interpretación breve del clima actual en máximo 4 o 5 renglones, con tono informativo (como un parte del tiempo), no narrativo ni de relato.
+Genera DOS cosas: una interpretación del clima y una lista de recomendaciones.
 
 Antes de escribir, identifica mentalmente estas tres cosas a partir de los datos:
 (a) el estado del cielo (despejado / parcialmente nublado / nublado / lluvia),
 (b) si la sensación térmica es notablemente distinta a la temperatura real (diferencia de 3°C o más = se siente más caluroso o más fresco de lo que marca el termómetro),
 (c) si el viento es suave (menos de 15 km/h), moderado (15 a 25 km/h) o fuerte (más de 25 km/h).
 
-La primera oración debe informar cómo está el ambiente ahora mismo, combinando estos tres elementos de forma clara, directa y con palabras sencillas de uso diario, sin dramatizar ni narrar como si fuera un cuento, y sin usar la palabra 'húmedo' ni términos técnicos de clima.
+1) INTERPRETACIÓN (3 oraciones, en un solo párrafo, tono informativo y explicativo, no narrativo ni de relato):
+- Primera oración: cómo se percibe el día frente a lo habitual y por qué, combinando el cielo y la sensación térmica (por ejemplo: 'el día se percibe más caluroso de lo normal debido a las nubes densas que cubren el cielo').
+- Segunda oración: qué efecto tiene el viento en esa sensación (si casi no hay brisa, la sensación se mantiene; si hay brisa, alivia).
+- Tercera oración: el riesgo de lluvia según la probabilidad indicada, dicho en palabras claras (por ejemplo 'existe un riesgo real de lluvia repentina', 'es poco probable que llueva'). Si no hay riesgo, dilo de forma directa.
+Habla de forma impersonal o en tercera persona. Usa palabras sencillas de uso diario, sin dramatizar. NO inventes datos que no estén arriba (por ejemplo, no hables de humedad ni de presión si no se proporcionan).
+
+2) RECOMENDACIONES (exactamente 4 puntos):
+- Cada punto es una frase corta (máximo unas 12 palabras) que empieza con un verbo en imperativo (por ejemplo 'Mantén', 'Viste', 'Lleva', 'Evita').
+- Los 4 puntos deben cubrir aspectos distintos entre sí (por ejemplo: hidratación, vestimenta, lluvia o protección solar, actividades al aire libre) y estar basados específicamente en el cielo, la sensación térmica, el viento y la lluvia identificados arriba. Si no hay riesgo de lluvia, cambia ese punto por protección solar u otro consejo que sí aplique.
+- Menciona el río Sinú, los cultivos o las actividades del campo solo si tienen relación directa con la condición climática actual.
+- Sin tecnicismos ni datos numéricos.
 
 PROHIBIDO usar frases genéricas del tipo: 'el clima está agradable', 'buen día para disfrutar', 'condiciones normales', 'un día como cualquier otro', 'el tiempo se mantiene estable' sin especificar cómo se siente realmente.
 
-La segunda oración debe orientar a la comunidad basándose específicamente en la combinación de cielo, sensación térmica y viento identificada arriba. Menciona el río Sinú, los cultivos o las actividades del campo solo si tienen relación directa con la condición climática actual. Tono cercano, claro, simple e informativo — como si se lo explicaras a un vecino. Nada de tecnicismos ni datos numéricos en el texto.
-
-Si falta información suficiente para responder, escribe: 'Sin información suficiente'.
+Si falta información suficiente para responder, escribe 'Sin información suficiente' en la interpretación y deja la lista de recomendaciones vacía.
 
 --- FORMATO DE RESPUESTA ---
 {
-  "interpretacion_clima": "texto"
+  "interpretacion_clima": "texto",
+  "recomendaciones": ["punto 1", "punto 2", "punto 3", "punto 4"]
 }`;
 
   return { systemPrompt, userPrompt };

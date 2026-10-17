@@ -42,7 +42,7 @@ Tendencia actual de esa estación: ${estaciones.tendencia_estacion_cercana}
 
 Genera UNA sola interpretación combinada (clima + río) en 5 a 7 renglones continuos, con tono claro, simple e informativo, como si se lo explicaras a un vecino — no narrativo ni de relato.
 
-Primero describe brevemente qué esperar del clima mañana (cielo, sensación de calor o frescor, viento, si hay chance de lluvia), con palabras simples de uso diario, sin mencionar cifras.
+Primero describe el clima de mañana en 3 oraciones, de forma explicativa (causa y efecto), con palabras simples de uso diario y sin mencionar cifras: (1) cómo se percibirá el día frente a lo habitual y por qué, combinando el cielo y la sensación térmica (por ejemplo: 'el día se percibirá más caluroso de lo normal debido a las nubes densas'); (2) qué efecto tendrá el viento en esa sensación (si casi no hay brisa, la sensación se mantiene; si hay brisa, alivia); (3) el riesgo de lluvia según la probabilidad indicada, dicho en palabras claras (por ejemplo 'existe un riesgo real de lluvia repentina' o 'es poco probable que llueva'). Habla de forma impersonal o en tercera persona. NO inventes datos que no estén arriba (por ejemplo, no hables de humedad ni de presión si no se proporcionan).
 
 Luego conecta esa expectativa de clima con el posible comportamiento del río: si se espera lluvia significativa, menciona que eso podría sumarse a la tendencia actual. Describe la proyección de la estación más cercana (dato clave) usando palabras de magnitud simples ('un cambio leve', 'una subida notoria', 'apenas se nota diferencia'), sin números.
 
@@ -52,11 +52,14 @@ PROHIBIDO usar frases genéricas del tipo: 'el clima estará agradable', 'el rí
 
 Usa vocabulario cotidiano, no técnico (evita 'caudal', 'nivel hidrométrico'; usa 'cantidad de agua', 'qué tan alto está el río'). Nada de tecnicismos ni datos numéricos en el texto.
 
-Si falta información suficiente para responder con algo de sustancia, escribe: 'Sin información suficiente'.
+Además de la interpretación, genera RECOMENDACIONES: exactamente 4 puntos. Cada punto es una frase corta (máximo unas 12 palabras) que empieza con un verbo en imperativo (por ejemplo 'Mantén', 'Viste', 'Lleva', 'Evita'). Los 4 puntos cubren aspectos distintos entre sí (por ejemplo: hidratación, vestimenta, lluvia o protección solar, actividades al aire libre) y se basan SOLO en el clima (cielo, sensación térmica, viento, lluvia), no en el río. Si no hay riesgo de lluvia, cambia ese punto por protección solar u otro consejo que sí aplique. Sin tecnicismos ni datos numéricos.
+
+Si falta información suficiente para responder con algo de sustancia, escribe 'Sin información suficiente' en la interpretación y deja la lista de recomendaciones vacía.
 
 --- FORMATO DE RESPUESTA ---
 {
-  "interpretacion": "texto"
+  "interpretacion": "texto",
+  "recomendaciones": ["punto 1", "punto 2", "punto 3", "punto 4"]
 }`;
 
   return { systemPrompt, userPrompt };
