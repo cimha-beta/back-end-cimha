@@ -38,6 +38,10 @@ function guardarEnCacheHoy({ departamento, municipio }, datos) {
 // Punto de entrada único para la rama "hoy": revisa caché, luego revisa si
 // ya hay una consulta igual en curso (y se une a ella en vez de duplicarla),
 // y solo si no hay ninguna de las dos ejecuta `tarea` de verdad.
+//
+// `tarea` debe devolver { respuesta, cacheable }. Si cacheable es false (por
+// ejemplo, quedaron estaciones pendientes de reintento), la respuesta se
+// entrega pero NO se guarda en caché, para que la próxima consulta reintente.
 async function obtenerOEncolarHoy(datos, tarea) {
   const enCacheHoy = obtenerDeCacheHoy(datos);
   if (enCacheHoy) return enCacheHoy;
@@ -50,9 +54,13 @@ async function obtenerOEncolarHoy(datos, tarea) {
   }
 
   const promesa = (async () => {
-    const resultado = await tarea();
-    guardarEnCacheHoy(datos, resultado);
-    return resultado;
+    const { respuesta, cacheable } = await tarea();
+    if (cacheable) {
+      guardarEnCacheHoy(datos, respuesta);
+    } else {
+      console.log(`⚠️ Reporte de "hoy" incompleto (estaciones pendientes): NO se guarda en caché para ${clave}, la próxima consulta reintenta`);
+    }
+    return respuesta;
   })();
 
   enCurso.set(clave, promesa);
