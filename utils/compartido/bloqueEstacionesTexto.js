@@ -12,6 +12,9 @@ function construirBloqueEstaciones(estacionesDetalle) {
     bloque += `Nivel actual: ${d.nivel_actual}\n`;
     bloque += `Precipitación actual: ${d.precipitacion_actual}\n`;
     bloque += `Tendencia actual: ${d.tendencia}\n`;
+    if (d.dato_desactualizado) {
+      bloque += `Nota: dato desactualizado (no se pudo consultar el IDEAM en este momento; es la última lectura conocida)\n`;
+    }
 
     if (d.prediccion && d.prediccion.prediccion_disponible) {
       bloque += `Proyección para las próximas 12 horas (basada solo en el comportamiento reciente del río, sin contar lluvia futura ni cambios de Urrá): ${d.prediccion.tendencia_proyectada}, cambio ${d.prediccion.magnitud_proyectada}\n`;

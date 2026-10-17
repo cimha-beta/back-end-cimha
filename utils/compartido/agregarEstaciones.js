@@ -13,6 +13,9 @@ function agregarEstaciones(estacionesProcesadas) {
     bloqueTexto += `Nivel actual: ${d.nivel_actual}\n`;
     bloqueTexto += `Precipitación actual: ${d.precipitacion_actual}\n`;
     bloqueTexto += `Tendencia: ${d.tendencia}\n`;
+    if (d.dato_desactualizado) {
+      bloqueTexto += `Nota: dato desactualizado (no se pudo consultar el IDEAM en este momento; es la última lectura conocida)\n`;
+    }
   }
 
   const estacionesValidas = estacionesProcesadas.filter(

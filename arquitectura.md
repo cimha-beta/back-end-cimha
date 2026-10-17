@@ -71,7 +71,7 @@ Este es el núcleo del sistema, encargado de orquestar la obtención de datos de
 
 El backend implementa un sistema robusto en memoria para minimizar latencia y consumo de APIs externas. **Toda caché vive en memoria del proceso de Node — se borra al reiniciar el backend (`node server.js`), y no se comparte entre instancias si en el futuro corre más de un servidor a la vez.**
 
-- **Caché de Estaciones IDEAM (`cacheEstaciones.js`):** Invalidación en lote cada 1 hora. Implementa un mecanismo de "fallback" utilizando el último dato conocido en caso de fallos (ej. error 404 intermitente del proxy de Google Apps Script).
+- **Caché de Estaciones IDEAM (`cacheEstaciones.js`, actualizado oct 2026):** Caché por estación que vence en hora en punto (09:00, 10:00, 11:00...). Si una estación falla queda pendiente de reintento: la siguiente consulta reintenta solo esa y reutiliza las que ya estaban en caché. Usa el último dato conocido como respaldo (marcado como desactualizado) y los reportes con estaciones pendientes NO se guardan en la caché de reporte (hoy, mañana, semana). Ver sección 4.1.
 - **Caché de Urrá (`cacheUrra.js`):** Persiste el análisis del PDF por 1 hora o hasta que ingrese un nuevo `file_id`.
 - **Caché de Pronósticos (`cacheManana.js` / `cacheSemana.js`):** Caché de resultados consolidados por municipio (1 hora para "mañana", 3 horas para "semana").
 - **Caché y candado de "Hoy" (`cacheHoy.js`, sep 2026):** Caché del reporte consolidado por municipio con TTL de 5 minutos (más corto que las otras ramas porque "hoy" es tiempo real). Además implementa *request coalescing*: un `Map` de promesas en curso (`enCurso`) hace que varias consultas simultáneas al mismo municipio compartan una sola ejecución en vez de duplicar el trabajo. Sin esto, N peticiones concurrentes al mismo municipio disparaban N rondas completas de Baserow + IDEAM + Open-Meteo + Groq, porque ninguna alcanzaba a guardar caché antes de que las demás empezaran. El candado se libera en un `finally`, así que un fallo no deja el municipio bloqueado ni guarda una respuesta errónea en caché.
@@ -136,13 +136,19 @@ El backend implementa un sistema robusto en memoria para minimizar latencia y co
 - Si la ventana se agota, la cola pausa el procesamiento (vía `setTimeout`) el tiempo restante de la ventana antes de seguir.
 - `estimarTokens` aproxima los tokens de un texto como `ceil(longitud / 4)`.
 
-**Archivo: `cacheEstaciones.js`**
-**Responsabilidad:** Caché en memoria de los datos del IDEAM por estación, con vencimiento en lote y respaldo de último dato conocido.
+**Archivo: `cacheEstaciones.js`** (actualizado oct 2026)
+**Responsabilidad:** Caché en memoria de los datos del IDEAM por estación, con vencimiento en hora en punto, reintento de estaciones pendientes y respaldo de último dato conocido.
 **Lógica y Reglas:**
-- Vigencia del lote: 1 hora, contada desde la PRIMERA estación que ingresó al lote actual. Todas las estaciones del lote vencen juntas, sin importar cuándo se agregaron después.
-- Solo se guardan datos válidos y completos: `esDatosValidos` exige que `Hobs.data` sea un arreglo no vacío con al menos un elemento que tenga `Fecha` y `Hobs` no nulo.
-- Si los datos recibidos son incompletos o erróneos, no se modifica la caché vigente (se conserva lo previo) y la función devuelve `false`.
-- Además se mantiene un respaldo de "último dato conocido" por estación que no vence por tiempo y únicamente se sobreescribe con datos nuevos válidos; se usa como fallback si el IDEAM falla en vivo.
+- Cada estación se guarda individualmente con la hora calendario en que se guardó (`claveHoraActual()` de `utils/compartido/horaEnPunto.js`). Al cambiar la hora en punto (09:00, 10:00, 11:00...) todo lo anterior se elimina: una estación guardada a las 09:59 vence a las 10:00. La validez se comprueba en cada lectura; además un temporizador limpia la memoria en cada hora en punto.
+- Como se cachea por estación y no por consulta, consultas de 1, 2 o 3 estaciones reutilizan las mismas entradas.
+- Solo se guardan datos válidos y completos: `esDatosValidos` exige que `Hobs.data` sea un arreglo no vacío con al menos un elemento que tenga `Fecha` y `Hobs` no nulo. Una respuesta vacía del IDEAM se trata como fallo.
+- `obtenerEstacion(codigo, consultarFn)` es el punto de entrada único y devuelve `{ datosIdeam, origen }`: `cache` (dentro de la hora actual), `vivo` (consultada ahora y guardada), `respaldo` (el IDEAM falló; se devuelve el último dato conocido, que puede ser viejo) o `sin_datos` (falló y no hay respaldo). `respaldo` y `sin_datos` son estaciones PENDIENTES DE REINTENTO: no se guardan en la caché vigente, así que la próxima consulta vuelve a intentar solo esas.
+- Consultas simultáneas a la misma estación comparten una sola petición al IDEAM (mapa de promesas en curso).
+- El respaldo de "último dato conocido" no vence por hora; solo se sobrescribe con datos nuevos válidos.
+- `obtenerResumenEstaciones` (en `routes/consulta.js`) devuelve además `cantidad_esperada`, `estaciones_pendientes` y `completo`. Si `completo` es `false`, el reporte se entrega pero NO se guarda en `cacheHoy`, `cacheManana` ni `cacheSemana`. Las estaciones con dato viejo llevan `dato_desactualizado = true`, y los reportes incluyen `estacion_N_desactualizada` y `estaciones.pendientes_reintento` solo cuando aplica.
+
+**Archivo: `utils/compartido/horaEnPunto.js`** (nuevo, oct 2026)
+**Responsabilidad:** Helpers para vencer cachés en hora en punto: `claveHoraActual()` (número que identifica la hora calendario actual) y `msHastaProximaHora()`. Colombia (UTC-5, sin horario de verano) coincide en horas completas con UTC, por lo que funciona igual en Railway.
 
 ### 4.2. Directorio: `services/hoy/`
 

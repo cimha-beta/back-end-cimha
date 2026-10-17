@@ -20,6 +20,9 @@ function armarReporteFinal({
   (estaciones.estaciones_detalle || []).forEach((estacion, index) => {
     const numero = index + 1;
     estacionesDescompuestas[`estacion_${numero}_nombre`] = estacion.nombre_estacion;
+    if (estacion.dato_desactualizado) {
+      estacionesDescompuestas[`estacion_${numero}_desactualizada`] = true;
+    }
     estacionesDescompuestas[`estacion_${numero}_municipio`] = estacion.municipio;
     estacionesDescompuestas[`estacion_${numero}_nivel_actual`] = estacion.nivel_actual;
     estacionesDescompuestas[`estacion_${numero}_precipitacion_actual`] = estacion.precipitacion_actual;
@@ -44,6 +47,10 @@ function armarReporteFinal({
     estaciones: {
       cantidad: (estaciones.estaciones_detalle || []).length,
       ...estacionesDescompuestas,
+      // Solo aparece cuando alguna estación no se pudo consultar bien.
+      ...((estaciones.estaciones_pendientes || []).length > 0
+        ? { pendientes_reintento: estaciones.estaciones_pendientes }
+        : {}),
       interpretacion: interpretacionEstaciones,
     },
     urra: {
