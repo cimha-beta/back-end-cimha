@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
+const { etiquetarPeticion } = require("../utils/compartido/logContexto");
+
 const { normalizarConsulta } = require("../utils/compartido/normalizarConsulta");
 const {
   buscarUbicacionGeografica,
@@ -249,6 +251,7 @@ router.post("/consulta-coordenadas", async (req, res) => {
 
   try {
     datos = normalizarConsulta(req.body || {});
+    etiquetarPeticion(`${datos.municipio} · ${datos.consulta}`);
   } catch (error) {
     return res.status(400).json({ ok: false, mensaje: error.message });
   }

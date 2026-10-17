@@ -7,24 +7,13 @@ const reportesRouter = require("./routes/reportes");
 const urraRouter = require("./routes/urra");
 const consultaRouter = require("./routes/consulta");
 const pruebaUrraRouter = require("./routes/pruebaUrra");
+const { instalarPrefijoEnLogs, middlewareContextoPeticion } = require("./utils/compartido/logContexto");
+
+// Cada línea de log llevará el número de su petición (ver logContexto.js).
+instalarPrefijoEnLogs();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// TEMPORAL (diagnóstico): registra TODA petición que llega al backend en el terminal.
-// Sirve para confirmar si la duplicación que ves (2 logs iguales por 1 consulta) es
-// porque el servidor recibe 2 HTTP requests reales (POST duplicado), un preflight de
-// CORS (OPTIONS, normal), o algo más. Quitar cuando ya no se necesite.
-let contadorDiagnostico = 0;
-app.use((req, res, next) => {
-  contadorDiagnostico += 1;
-  const origen = req.headers.origin || "(sin Origin: Postman/curl/misma app)";
-  console.log(
-    `[DIAG #${contadorDiagnostico}] ${new Date().toLocaleTimeString()} ` +
-      `${req.method} ${req.originalUrl} | IP ${req.ip} | Origin: ${origen}`
-  );
-  return next();
-});
 
 // Permite que el frontend (tus HTML) le hable a este backend
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",");
@@ -32,6 +21,10 @@ app.use(cors({ origin: allowedOrigins }));
 
 // Permite leer JSON en el cuerpo de las peticiones (req.body)
 app.use(express.json());
+
+// Número de petición + una línea de acceso. Va después de cors y json para que
+// el preflight OPTIONS (que responde cors) no aparezca en los logs.
+app.use(middlewareContextoPeticion);
 
 // Todas las rutas de webhooks viven bajo /webhook
 app.use("/webhook", reportesRouter);
