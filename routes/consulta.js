@@ -23,11 +23,7 @@ const {
 } = require("../utils/hoy/promptsIA");
 const { parsearRespuestaGroq } = require("../utils/compartido/parsearRespuestaGroq");
 const { armarReporteFinal } = require("../utils/hoy/armarReporteFinal");
-const {
-  obtenerEstacionDeCache,
-  guardarEstacionEnCache,
-  obtenerUltimoDatoConocido,
-} = require("../services/compartido/cacheEstaciones");
+const { obtenerEstacion } = require("../services/compartido/cacheEstaciones");
 const { obtenerUrraDeCache, guardarUrraEnCache } = require("../services/hoy/cacheUrra");
 const { obtenerOEncolarHoy } = require("../services/hoy/cacheHoy");
 const { generarPrediccionEstacion } = require("../utils/manana/generarPrediccion");
@@ -44,8 +40,16 @@ const { armarReporteFinal: armarReporteFinalSemana } = require("../utils/semana/
 const { obtenerDeCacheSemana, guardarEnCacheSemana } = require("../services/semana/cacheSemana");
 
 // Trae y procesa TODAS las estaciones relevantes para un departamento/municipio.
-// Cada estación individual usa su propia caché de 1 hora (útil porque varias
-// consultas de municipios distintos pueden compartir las mismas estaciones).
+// Cada estación individual usa su propia caché, que vence en hora en punto
+// (útil porque varias consultas de municipios distintos pueden compartir las
+// mismas estaciones).
+//
+// Si una estación no llega bien del IDEAM queda como PENDIENTE DE REINTENTO:
+//  - con dato viejo de respaldo -> se muestra marcada como desactualizada
+//  - sin ningún dato            -> se omite del reporte
+// En ambos casos el resumen devuelve completo = false, y quien llama NO debe
+// guardar el reporte en caché, para que la próxima consulta reintente solo
+// las estaciones pendientes (las que sí llegaron siguen en caché).
 async function obtenerResumenEstaciones({ departamento, municipio }, { incluirPrediccion = false } = {}) {
   console.log("🌊 Buscando orden en el río para", municipio, departamento);
   const ordenInfo = await buscarOrdenEstacion({ departamento, municipio });
@@ -58,34 +62,37 @@ async function obtenerResumenEstaciones({ departamento, municipio }, { incluirPr
   console.log(`✅ Se encontraron ${estaciones.length} estación(es)`);
 
   const estacionesProcesadas = [];
+  const estacionesPendientes = [];
 
   for (const estacion of estaciones) {
     const codigo = estacion.Codigo_Estacion;
     console.log(`   ↳ Estación: ${estacion.Nombre_Estacion} (${codigo})`);
 
-    let datosIdeam = obtenerEstacionDeCache(codigo);
+    const { datosIdeam, origen } = await obtenerEstacion(codigo, consultarIdeam);
 
-    if (datosIdeam) {
+    if (origen === "cache") {
       console.log(`   ⚡ Datos del IDEAM en caché para ${estacion.Nombre_Estacion}`);
+    } else if (origen === "vivo") {
+      console.log(`   🌐 Datos del IDEAM obtenidos en vivo para ${estacion.Nombre_Estacion}`);
+    } else if (origen === "respaldo") {
+      console.log(`   🔁 Usando el último dato conocido (posiblemente desactualizado) para ${estacion.Nombre_Estacion} — queda pendiente de reintento`);
+      estacionesPendientes.push({
+        codigo_estacion: codigo,
+        nombre_estacion: estacion.Nombre_Estacion,
+        motivo: "dato_desactualizado",
+      });
     } else {
-      try {
-        console.log(`   🌐 Consultando IDEAM en vivo para ${estacion.Nombre_Estacion}...`);
-        datosIdeam = await consultarIdeam(codigo);
-        guardarEstacionEnCache(codigo, datosIdeam);
-      } catch (error) {
-        console.error(`   ❌ Falló la consulta en vivo de ${estacion.Nombre_Estacion}:`, error.message);
-        // Si falla, usamos el último dato bueno que tengamos guardado (aunque
-        // ya esté vencido) en vez de perder la estación por completo.
-        datosIdeam = obtenerUltimoDatoConocido(codigo);
-        if (!datosIdeam) {
-          console.error(`   ⛔ No hay ningún dato de respaldo para ${estacion.Nombre_Estacion}, se omite.`);
-          continue;
-        }
-        console.log(`   🔁 Usando el último dato conocido (posiblemente desactualizado) para ${estacion.Nombre_Estacion}`);
-      }
+      console.error(`   ⛔ No hay ningún dato para ${estacion.Nombre_Estacion}, se omite — queda pendiente de reintento`);
+      estacionesPendientes.push({
+        codigo_estacion: codigo,
+        nombre_estacion: estacion.Nombre_Estacion,
+        motivo: "sin_datos",
+      });
+      continue;
     }
 
     const procesada = procesarEstacion(datosIdeam, estacion);
+    if (origen === "respaldo") procesada.dato_desactualizado = true;
 
     if (incluirPrediccion) {
       procesada.prediccion = generarPrediccionEstacion(datosIdeam);
@@ -103,10 +110,16 @@ async function obtenerResumenEstaciones({ departamento, municipio }, { incluirPr
   }
 
   const resumen = agregarEstaciones(estacionesProcesadas);
+  resumen.cantidad_esperada = estaciones.length;
+  resumen.estaciones_pendientes = estacionesPendientes;
+  resumen.completo = estacionesPendientes.length === 0;
+
   console.log("📋 Resumen de estaciones:", {
     estacion_cercana: resumen.nombre_estacion_cercana,
     tendencia: resumen.tendencia_estacion_cercana,
     cantidad: resumen.cantidad_estaciones,
+    esperadas: resumen.cantidad_esperada,
+    pendientes: estacionesPendientes.length,
   });
 
   return resumen;
@@ -220,7 +233,12 @@ async function procesarConsultaHoy(datos, ubicacion) {
 
   console.log("🎉 Reporte final armado");
 
-  return { ok: true, reporte: reporteFinal };
+  // cacheable = false si quedó alguna estación pendiente de reintento
+  // (ver obtenerOEncolarHoy en cacheHoy.js).
+  return {
+    respuesta: { ok: true, reporte: reporteFinal },
+    cacheable: estacionesResumen.completo,
+  };
 }
 
 // Equivalente a: Webhook -> Code -> Ubicación Geografica -> Router
@@ -288,7 +306,13 @@ router.post("/consulta-coordenadas", async (req, res) => {
       console.log("🎉 Reporte de mañana armado");
 
       const respuestaManana = { ok: true, reporte: reporteFinalManana };
-      guardarEnCacheManana(datos, respuestaManana);
+      if (estacionesResumen.completo) {
+        guardarEnCacheManana(datos, respuestaManana);
+      } else {
+        console.log(
+          `⚠️ Reporte de "mañana" incompleto (${estacionesResumen.estaciones_pendientes.length} estación(es) pendiente(s)): NO se guarda en caché, la próxima consulta reintenta`
+        );
+      }
 
       return res.status(200).json(respuestaManana);
     }
@@ -353,7 +377,13 @@ router.post("/consulta-coordenadas", async (req, res) => {
       console.log("🎉 Reporte de semana armado");
 
       const respuestaSemana = { ok: true, reporte: reporteFinalSemana };
-      guardarEnCacheSemana(datos, respuestaSemana);
+      if (estacionesResumen.completo) {
+        guardarEnCacheSemana(datos, respuestaSemana);
+      } else {
+        console.log(
+          `⚠️ Reporte de "semana" incompleto (${estacionesResumen.estaciones_pendientes.length} estación(es) pendiente(s)): NO se guarda en caché, la próxima consulta reintenta`
+        );
+      }
 
       return res.status(200).json(respuestaSemana);
     }
